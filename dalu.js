@@ -1,4 +1,4 @@
-    // Sistema de dados em memória (simula banco de dados)
+// Sistema de dados melhorado com persistência local
         let appointments = [];
         let appointmentIdCounter = 1;
         let isAdminLoggedIn = false;
@@ -6,6 +6,8 @@
         // Configurações
         const ADMIN_PASSWORD = 'admin123'; // Troque por uma senha segura
         const TIME_SLOTS = ['08:00', '09:00', '10:00', '11:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
+        const STORAGE_KEY = 'nail_studio_appointments';
+        const COUNTER_KEY = 'nail_studio_counter';
 
         // Mapeamento de serviços
         const SERVICE_NAMES = {
@@ -18,24 +20,121 @@
             'combo_completo': '🎉 Combo Completo (Mãos + Pés)'
         };
 
+        // Sistema de sincronização entre abas
+        let syncInterval;
+
         // Inicialização
         document.addEventListener('DOMContentLoaded', function() {
+            // Carregar dados salvos
+            loadStoredData();
+            
             // Configurar data mínima como hoje
             const today = new Date().toISOString().split('T')[0];
             document.querySelector('input[name="date"]').setAttribute('min', today);
 
-            // Carregar dados existentes (simulação)
-            loadSampleData();
+            // Carregar dados de exemplo se for primeira vez
+            if (appointments.length === 0) {
+                loadSampleData();
+            }
             
             // Configurar event listeners
             setupEventListeners();
+            
+            // Iniciar sincronização entre abas
+            startSync();
         });
 
+        // Funções de persistência de dados
+        function saveData() {
+            try {
+                // Converter datas para strings antes de salvar
+                const dataToSave = appointments.map(apt => ({
+                    ...apt,
+                    createdAt: apt.createdAt.toISOString()
+                }));
+                
+                // Usar sessionStorage em vez de localStorage para simular servidor
+                sessionStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+                sessionStorage.setItem(COUNTER_KEY, appointmentIdCounter.toString());
+                
+                // Disparar evento personalizado para sincronizar abas
+                window.dispatchEvent(new CustomEvent('appointmentsUpdated'));
+            } catch (error) {
+                console.warn('Não foi possível salvar os dados:', error);
+            }
+        }
+
+        function loadStoredData() {
+            try {
+                const stored = sessionStorage.getItem(STORAGE_KEY);
+                const storedCounter = sessionStorage.getItem(COUNTER_KEY);
+                
+                if (stored) {
+                    const parsedData = JSON.parse(stored);
+                    appointments = parsedData.map(apt => ({
+                        ...apt,
+                        createdAt: new Date(apt.createdAt)
+                    }));
+                }
+                
+                if (storedCounter) {
+                    appointmentIdCounter = parseInt(storedCounter, 10);
+                }
+            } catch (error) {
+                console.warn('Não foi possível carregar os dados:', error);
+                appointments = [];
+                appointmentIdCounter = 1;
+            }
+        }
+
+        function startSync() {
+            // Escutar mudanças de outras abas
+            window.addEventListener('storage', function(e) {
+                if (e.key === STORAGE_KEY) {
+                    loadStoredData();
+                    // Recarregar horários se estiver na tela de agendamento
+                    const dateInput = document.querySelector('input[name="date"]');
+                    if (dateInput && dateInput.value) {
+                        loadAvailableTimes();
+                    }
+                    // Atualizar admin se estiver logado
+                    if (isAdminLoggedIn) {
+                        updateAdminStats();
+                        renderAppointmentsList();
+                    }
+                }
+            });
+
+            // Escutar evento customizado para mudanças na mesma aba
+            window.addEventListener('appointmentsUpdated', function() {
+                const dateInput = document.querySelector('input[name="date"]');
+                if (dateInput && dateInput.value) {
+                    loadAvailableTimes();
+                }
+                if (isAdminLoggedIn) {
+                    updateAdminStats();
+                    renderAppointmentsList();
+                }
+            });
+
+            // Verificar mudanças periodicamente (fallback)
+            syncInterval = setInterval(() => {
+                const currentData = sessionStorage.getItem(STORAGE_KEY);
+                const currentStoredData = JSON.stringify(appointments.map(apt => ({
+                    ...apt,
+                    createdAt: apt.createdAt.toISOString()
+                })));
+                
+                if (currentData !== currentStoredData) {
+                    loadStoredData();
+                    window.dispatchEvent(new CustomEvent('appointmentsUpdated'));
+                }
+            }, 2000); // Verificar a cada 2 segundos
+        }
+
         function loadSampleData() {
-            // Adicionar alguns agendamentos de exemplo
-            const today = new Date();
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
+            // Não adicionar dados de exemplo para manter sistema limpo
+            // Os dados serão criados conforme os agendamentos forem feitos
         }
 
         function setupEventListeners() {
@@ -150,6 +249,9 @@
                 return;
             }
 
+            // Recarregar dados mais recentes antes de verificar disponibilidade
+            loadStoredData();
+
             // Verificar quais horários estão ocupados na data selecionada
             const occupiedTimes = appointments
                 .filter(apt => apt.date === selectedDate && apt.status !== 'cancelled')
@@ -169,6 +271,21 @@
         }
 
         function selectTime(time) {
+            // Verificar novamente se o horário ainda está disponível (dupla verificação)
+            loadStoredData();
+            const selectedDate = document.querySelector('input[name="date"]').value;
+            const isStillAvailable = !appointments.some(apt => 
+                apt.date === selectedDate && 
+                apt.time === time && 
+                apt.status !== 'cancelled'
+            );
+
+            if (!isStillAvailable) {
+                showError('Este horário acabou de ser ocupado. Recarregando horários disponíveis...');
+                loadAvailableTimes();
+                return;
+            }
+
             // Remover seleção anterior
             document.querySelectorAll('.time-slot').forEach(slot => {
                 slot.classList.remove('selected');
@@ -200,71 +317,83 @@
                 return;
             }
 
-            // Verificar se horário ainda está disponível
-            const selectedDate = formData.get('date');
-            const isTimeAvailable = !appointments.some(apt => 
-                apt.date === selectedDate && 
-                apt.time === selectedTime && 
-                apt.status !== 'cancelled'
-            );
-
-            if (!isTimeAvailable) {
-                showError('Este horário acabou de ser ocupado. Por favor, escolha outro horário.');
-                loadAvailableTimes(); // Recarregar horários
-                return;
-            }
-
             // Mostrar loading
             submitBtn.disabled = true;
-            btnText.innerHTML = '<div class="loading"></div> Processando...';
+            btnText.innerHTML = '<div class="loading"></div> Verificando disponibilidade...';
 
-            // Processar agendamento
+            // Verificação final de disponibilidade (crítica para evitar conflitos)
             setTimeout(() => {
-                const services = selectedServices.map(cb => cb.value);
-                const serviceNames = selectedServices.map(cb => {
-                    return cb.closest('.checkbox-item').querySelector('.service-name').textContent;
-                });
+                // Recarregar dados mais recentes
+                loadStoredData();
+                
+                const selectedDate = formData.get('date');
+                const isTimeAvailable = !appointments.some(apt => 
+                    apt.date === selectedDate && 
+                    apt.time === selectedTime && 
+                    apt.status !== 'cancelled'
+                );
 
-                const total = selectedServices.reduce((sum, cb) => {
-                    return sum + parseFloat(cb.dataset.price);
-                }, 0);
+                if (!isTimeAvailable) {
+                    showError('⚠️ Este horário acabou de ser ocupado por outro cliente. Por favor, escolha outro horário.');
+                    loadAvailableTimes(); // Recarregar horários
+                    
+                    // Resetar botão
+                    submitBtn.disabled = false;
+                    btnText.textContent = 'Confirmar Agendamento';
+                    return;
+                }
 
-                const newAppointment = {
-                    id: appointmentIdCounter++,
-                    name: formData.get('name'),
-                    phone: formData.get('phone'),
-                    date: selectedDate,
-                    time: selectedTime,
-                    services: services,
-                    serviceNames: serviceNames,
-                    total: total,
-                    notes: formData.get('notes') || '',
-                    status: 'pending',
-                    createdAt: new Date()
-                };
-
-                // Adicionar agendamento
-                appointments.push(newAppointment);
-
-                // Resetar formulário
-                e.target.reset();
-                document.querySelectorAll('.checkbox-item').forEach(item => {
-                    item.classList.remove('checked');
-                });
-                document.getElementById('totalSection').style.display = 'none';
-                document.getElementById('timeSlots').innerHTML = '<p style="color: #6c757d; text-align: center; padding: 20px;">Selecione uma data para ver os horários disponíveis</p>';
-                document.getElementById('selectedTime').value = '';
-
-                // Mostrar sucesso
-                document.getElementById('successMessage').classList.add('show');
+                // Processar agendamento se horário ainda estiver disponível
+                btnText.innerHTML = '<div class="loading"></div> Processando agendamento...';
+                
                 setTimeout(() => {
-                    document.getElementById('successMessage').classList.remove('show');
-                }, 5000);
+                    const services = selectedServices.map(cb => cb.value);
+                    const serviceNames = selectedServices.map(cb => {
+                        return cb.closest('.checkbox-item').querySelector('.service-name').textContent;
+                    });
 
-                // Resetar botão
-                submitBtn.disabled = false;
-                btnText.textContent = 'Confirmar Agendamento';
-            }, 1500);
+                    const total = selectedServices.reduce((sum, cb) => {
+                        return sum + parseFloat(cb.dataset.price);
+                    }, 0);
+
+                    const newAppointment = {
+                        id: appointmentIdCounter++,
+                        name: formData.get('name'),
+                        phone: formData.get('phone'),
+                        date: selectedDate,
+                        time: selectedTime,
+                        services: services,
+                        serviceNames: serviceNames,
+                        total: total,
+                        notes: formData.get('notes') || '',
+                        status: 'pending',
+                        createdAt: new Date()
+                    };
+
+                    // Adicionar agendamento E salvar imediatamente
+                    appointments.push(newAppointment);
+                    saveData(); // CRÍTICO: Salvar imediatamente para outras abas verem
+
+                    // Resetar formulário
+                    e.target.reset();
+                    document.querySelectorAll('.checkbox-item').forEach(item => {
+                        item.classList.remove('checked');
+                    });
+                    document.getElementById('totalSection').style.display = 'none';
+                    document.getElementById('timeSlots').innerHTML = '<p style="color: #6c757d; text-align: center; padding: 20px;">Selecione uma data para ver os horários disponíveis</p>';
+                    document.getElementById('selectedTime').value = '';
+
+                    // Mostrar sucesso
+                    document.getElementById('successMessage').classList.add('show');
+                    setTimeout(() => {
+                        document.getElementById('successMessage').classList.remove('show');
+                    }, 5000);
+
+                    // Resetar botão
+                    submitBtn.disabled = false;
+                    btnText.textContent = 'Confirmar Agendamento';
+                }, 1000);
+            }, 500); // Pequeno delay para simular verificação no servidor
         }
 
         function showError(message) {
@@ -286,6 +415,9 @@
                 alert('Por favor, digite seu telefone.');
                 return;
             }
+            
+            // Recarregar dados antes da busca
+            loadStoredData();
             
             // Normalizar telefone para busca
             const normalizedPhone = phone.replace(/\D/g, '');
@@ -340,9 +472,11 @@
 
         function clientCancelAppointment(id) {
             if (confirm('Tem certeza que deseja cancelar este agendamento?')) {
+                loadStoredData(); // Recarregar dados
                 const appointment = appointments.find(apt => apt.id === id);
                 if (appointment) {
                     appointment.status = 'cancelled';
+                    saveData(); // Salvar mudança
                     searchClientAppointments(); // Recarregar lista
                     alert('Agendamento cancelado com sucesso!');
                 }
@@ -376,6 +510,7 @@
         function showAdminDashboard() {
             document.getElementById('adminLogin').style.display = 'none';
             document.getElementById('adminDashboard').style.display = 'block';
+            loadStoredData(); // Recarregar dados
             updateAdminStats();
             renderAppointmentsList();
         }
@@ -496,9 +631,11 @@
         }
 
         function updateAppointmentStatus(appointmentId, newStatus) {
+            loadStoredData(); // Recarregar dados
             const appointment = appointments.find(apt => apt.id === appointmentId);
             if (appointment) {
                 appointment.status = newStatus;
+                saveData(); // Salvar mudança
                 updateAdminStats();
                 renderAppointmentsList();
                 
@@ -557,5 +694,12 @@
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && document.getElementById('adminPassword') === document.activeElement) {
                 adminLogin();
+            }
+        });
+
+        // Limpeza quando a página for fechada
+        window.addEventListener('beforeunload', function() {
+            if (syncInterval) {
+                clearInterval(syncInterval);
             }
         });
