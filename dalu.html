@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="dalu.css">
+    <script src="dalu.js"></script>
+    <title>Sistema de Agendamento - Estúdio de Unhas</title>
+</head>
+<body>
+    <div class="container" id="mainContainer">
+        <!-- Navigation -->
+        <div class="nav-buttons">
+            <button class="nav-btn active" onclick="showSection('booking')">💅 Agendar</button>
+            <button class="nav-btn" onclick="showSection('manage')">📋 Meus Agendamentos</button>
+            <button class="nav-btn" onclick="showSection('admin')">👩‍💼 Admin</button>
+        </div>
+
+        <!-- Booking Section -->
+        <div class="section active" id="bookingSection">
+            <div class="header">
+                <h1><span class="emoji">💅</span>AGENDE SEU HORÁRIO</h1>
+                <p>Preencha os dados abaixo para agendar seu atendimento</p>
+            </div>
+
+            <form id="appointmentForm">
+                <div class="form-group">
+                    <label><span class="emoji">👤</span>Nome Completo</label>
+                    <input type="text" class="form-control" name="name" required placeholder="Digite seu nome completo">
+                </div>
+
+                <div class="form-group">
+                    <label><span class="emoji">📱</span>WhatsApp</label>
+                    <input type="tel" class="form-control" name="phone" required placeholder="(11) 99999-9999">
+                </div>
+
+                <div class="form-group">
+                    <label><span class="emoji">📅</span>Data Preferida</label>
+                    <input type="date" class="form-control" name="date" required min="" onchange="loadAvailableTimes()">
+                </div>
+
+                <div class="form-group">
+                    <label><span class="emoji">🕐</span>Horários Disponíveis</label>
+                    <div id="timeSlots">
+                        <p style="color: #6c757d; text-align: center; padding: 20px;">Selecione uma data para ver os horários disponíveis</p>
+                    </div>
+                    <input type="hidden" name="time" id="selectedTime">
+                </div>
+
+                <div class="form-group">
+                    <label><span class="emoji">✨</span>Serviços Desejados (selecione um ou mais)</label>
+                    <div class="checkbox-group">
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="services" value="blindagem" data-price="35">
+                            <div class="service-info">
+                                <span class="service-name">💎 Blindagem das Unhas</span>
+                                <span class="service-price">R$ 35,00</span>
+                            </div>
+                        </div>
+                        
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="services" value="gel" data-price="45">
+                            <div class="service-info">
+                                <span class="service-name">✨ Unhas em Gel</span>
+                                <span class="service-price">R$ 45,00</span>
+                            </div>
+                        </div>
+
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="services" value="plastica" data-price="40">
+                            <div class="service-info">
+                                <span class="service-name">🦶 Plástica dos Pés</span>
+                                <span class="service-price">R$ 40,00</span>
+                            </div>
+                        </div>
+
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="services" value="pedicure" data-price="25">
+                            <div class="service-info">
+                                <span class="service-name">💅 Pedicure Tradicional</span>
+                                <span class="service-price">R$ 25,00</span>
+                            </div>
+                        </div>
+
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="services" value="manicure" data-price="30">
+                            <div class="service-info">
+                                <span class="service-name">👐 Manicure Tradicional</span>
+                                <span class="service-price">R$ 30,00</span>
+                            </div>
+                        </div>
+
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="services" value="decoracao" data-price="15">
+                            <div class="service-info">
+                                <span class="service-name">🎨 Decoração de Unha</span>
+                                <span class="service-price">R$ 15,00</span>
+                            </div>
+                        </div>
+
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="services" value="combo_completo" data-price="90">
+                            <div class="service-info">
+                                <span class="service-name">🎉 Combo Completo (Mãos + Pés)</span>
+                                <span class="service-price">R$ 90,00 (Desconto especial!)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="total-section" id="totalSection" style="display: none;">
+                    <div class="total-title">
+                        <span class="emoji">💰</span>Total do Agendamento
+                    </div>
+                    <div class="total-value" id="totalValue">R$ 0,00</div>
+                </div>
+
+                <div class="form-group">
+                    <label><span class="emoji">💬</span>Observações (opcional)</label>
+                    <textarea class="form-control" name="notes" rows="3" placeholder="Alguma observação especial ou preferência?"></textarea>
+                </div>
+
+                <button type="submit" class="submit-btn">
+                    <span class="emoji">📨</span>
+                    <span id="btnText">Confirmar Agendamento</span>
+                </button>
+            </form>
+
+            <div class="success-message" id="successMessage">
+                <h3>✅ Agendamento Confirmado!</h3>
+                <p>Seu agendamento foi confirmado com sucesso! Você receberá uma confirmação no WhatsApp em breve.</p>
+            </div>
+
+            <div class="error-message" id="errorMessage">
+                <h3>❌ Erro no Agendamento</h3>
+                <p id="errorText">Ocorreu um erro. Tente novamente.</p>
+            </div>
+        </div>
+
+        <!-- Client Management Section -->
+        <div class="section" id="manageSection">
+            <div class="header">
+                <h1><span class="emoji">📋</span>MEUS AGENDAMENTOS</h1>
+                <p>Consulte e gerencie seus agendamentos</p>
+            </div>
+
+            <div class="client-search">
+                <div class="form-group">
+                    <label><span class="emoji">📱</span>Digite seu WhatsApp para consultar</label>
+                    <input type="tel" class="form-control" id="searchPhone" placeholder="(11) 99999-9999">
+                </div>
+                <button type="button" class="submit-btn" onclick="searchClientAppointments()">
+                    <span class="emoji">🔍</span>Buscar Meus Agendamentos
+                </button>
+            </div>
+
+            <div id="clientAppointmentsContainer" style="display: none;">
+                <h3 style="margin-bottom: 20px; color: #2c3e50;">📅 Seus Agendamentos</h3>
+                <div id="clientAppointmentsList"></div>
+            </div>
+        </div>
+
+        <!-- Admin Section -->
+        <div class="section" id="adminSection">
+            <!-- Login Form -->
+            <div id="adminLogin" class="login-form">
+                <div class="header">
+                    <h1><span class="emoji">👩‍💼</span>PAINEL ADMINISTRATIVO</h1>
+                    <p>Faça login para gerenciar os agendamentos</p>
+                </div>
+
+                <div class="form-group">
+                    <label><span class="emoji">🔐</span>Senha</label>
+                    <input type="password" class="form-control" id="adminPassword" placeholder="Digite a senha de administrador">
+                </div>
+
+                <button type="button" class="submit-btn" onclick="adminLogin()">
+                    <span class="emoji">🚪</span>Entrar
+                </button>
+            </div>
+
+            <!-- Admin Dashboard -->
+            <div id="adminDashboard" style="display: none;">
+                <div class="header">
+                    <h1><span class="emoji">📊</span>PAINEL DE CONTROLE</h1>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <p>Gerencie seus agendamentos e finanças</p>
+                        <button class="btn-small btn-cancel" onclick="adminLogout()">Sair</button>
+                    </div>
+                </div>
+
+                <!-- Statistics -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalAppointments">0</div>
+                        <div class="stat-label">Total de Agendamentos</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="todayAppointments">0</div>
+                        <div class="stat-label">Hoje</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="pendingAppointments">0</div>
+                        <div class="stat-label">Pendentes</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="monthlyRevenue">R$ 0</div>
+                        <div class="stat-label">Receita do Mês</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="completedServices">0</div>
+                        <div class="stat-label">Serviços Concluídos</div>
+                    </div>
+                </div>
+
+                <!-- Revenue Details -->
+                <div class="revenue-details">
+                    <h3 style="margin-bottom: 15px; color: #333;">💰 Detalhes Financeiros do Mês</h3>
+                    <div class="revenue-grid">
+                        <div class="revenue-item confirmed">
+                            <strong style="color: #28a745;">Receita Confirmada</strong>
+                            <div id="confirmedRevenue" style="font-size: 1.2em; margin-top: 5px;">R$ 0,00</div>
+                        </div>
+                        <div class="revenue-item pending">
+                            <strong style="color: #856404;">Receita Pendente</strong>
+                            <div id="pendingRevenue" style="font-size: 1.2em; margin-top: 5px;">R$ 0,00</div>
+                        </div>
+                        <div class="revenue-item cancelled">
+                            <strong style="color: #dc3545;">Receita Perdida</strong>
+                            <div id="cancelledRevenue" style="font-size: 1.2em; margin-top: 5px;">R$ 0,00</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Appointments List -->
+                <div id="appointmentsList">
+                    <h3 style="margin-bottom: 20px;">📅 Agendamentos</h3>
+                    <div id="appointmentsContainer">
+                        <p style="text-align: center; color: #6c757d; padding: 40px;">Nenhum agendamento encontrado</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
